@@ -1,0 +1,8 @@
+streamlit
+pandas
+openpyxl
+python-docx
+langchain
+langchain-openai
+chromadb
+requests
