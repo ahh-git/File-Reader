@@ -1,3 +1,7 @@
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 import streamlit as st
 import pandas as pd
 import os
@@ -16,7 +20,7 @@ SAVE_DIR = "vault_storage"
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
-# Change this to your preferred 6-digit PIN
+# Default PIN: 123456 (You can change this)
 PIN_HASH = hashlib.sha256("123456".encode()).hexdigest()
 
 def check_auth():
@@ -48,7 +52,7 @@ check_auth()
 # --- 2. HELPER FUNCTIONS ---
 def resolve_and_download(url):
     try:
-        res = requests.get(url, allow_redirects=True, stream=True)
+        res = requests.get(url, allow_redirects=True, timeout=10)
         final_url = res.url
         if "docs.google.com/spreadsheets" in final_url:
             final_url = final_url.split("/edit")[0] + "/export?format=csv"
@@ -63,7 +67,7 @@ def resolve_and_download(url):
         st.error(f"Download failed: {e}")
         return None
 
-# --- 3. SIDEBAR (Management) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.header("📂 Data Management")
     if st.button("Logout"):
@@ -80,7 +84,9 @@ with st.sidebar:
     link = st.text_input("🔗 Paste Link (Short/Google/Direct)")
     if st.button("Fetch Link"):
         name = resolve_and_download(link)
-        if name: st.success(f"Saved: {name}")
+        if name: 
+            st.success(f"Saved: {name}")
+            st.rerun()
 
     st.divider()
     files = os.listdir(SAVE_DIR)
@@ -102,11 +108,19 @@ if selected != "None":
     st.subheader("🤖 Ask AI")
     key = st.text_input("OpenAI API Key", type="password")
     if key and content:
-        chunks = RecursiveCharacterTextSplitter(chunk_size=1000).split_text(content)
-        vector = Chroma.from_texts(chunks, OpenAIEmbeddings(openai_api_key=key))
-        qa = RetrievalQA.from_chain_type(llm=ChatOpenAI(openai_api_key=key), retriever=vector.as_retriever())
+        # Optimized Chunking
+        chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100).split_text(content)
         
-        query = st.text_input("Search details...")
+        # Vector Search
+        embeddings = OpenAIEmbeddings(openai_api_key=key)
+        vector = Chroma.from_texts(chunks, embeddings)
+        qa = RetrievalQA.from_chain_type(
+            llm=ChatOpenAI(openai_api_key=key, model="gpt-3.5-turbo"), 
+            retriever=vector.as_retriever()
+        )
+        
+        query = st.text_input("Search details or ask a question:")
         if query:
-            with st.spinner("AI Thinking..."):
-                st.info(qa.invoke(query)["result"])
+            with st.spinner("AI is analyzing..."):
+                result = qa.invoke(query)
+                st.info(result["result"])
