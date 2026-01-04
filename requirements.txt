@@ -4,5 +4,7 @@ openpyxl
 python-docx
 langchain
 langchain-openai
+langchain-community
 chromadb
+pysqlite3-binary
 requests
